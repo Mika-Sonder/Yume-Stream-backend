@@ -20,6 +20,7 @@ function asyncHandler(handler) {
 
 router.get(
   "/image-proxy",
+  requireApiKey,
   asyncHandler(async (req, res) => {
     const { url } = req.query;
     if (!url) {
@@ -38,6 +39,7 @@ router.get(
       });
 
       res.setHeader("Content-Type", response.headers["content-type"] || "image/jpeg");
+      res.setHeader("Cache-Control", "public, max-age=86400");
       response.data.pipe(res);
     } catch (err) {
       throw new ApiError(500, "Error al descargar la imagen de portada", err.message);
@@ -99,6 +101,35 @@ router.get(
 
     const response = await animeService.getAnimeInfo(req.query.url);
     res.status(200).json(response);
+  })
+);
+
+router.post(
+  "/batch-info",
+  asyncHandler(async (req, res) => {
+    const urls = Array.isArray(req.body?.urls)
+      ? req.body.urls.filter((url) => typeof url === "string" && url.trim()).slice(0, 30)
+      : [];
+
+    if (!urls.length) {
+      throw new ApiError(400, "Se requiere una lista de URLs");
+    }
+
+    const results = new Array(urls.length).fill(null);
+    let nextIndex = 0;
+    const workers = Array.from({ length: Math.min(6, urls.length) }, async () => {
+      while (nextIndex < urls.length) {
+        const index = nextIndex++;
+        try {
+          results[index] = await animeService.getAnimeInfo(urls[index]);
+        } catch (_error) {
+          results[index] = null;
+        }
+      }
+    });
+
+    await Promise.all(workers);
+    res.status(200).json({ success: true, data: { results } });
   })
 );
 
