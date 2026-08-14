@@ -92,6 +92,35 @@ router.get(
   })
 );
 
+router.post(
+  "/batch-search",
+  asyncHandler(async (req, res) => {
+    const queries = Array.isArray(req.body?.queries)
+      ? req.body.queries.filter((query) => typeof query === "string" && query.trim()).slice(0, 30)
+      : [];
+
+    if (!queries.length) {
+      throw new ApiError(400, "Se requiere una lista de búsquedas");
+    }
+
+    const results = new Array(queries.length).fill(null);
+    let nextIndex = 0;
+    const workers = Array.from({ length: Math.min(6, queries.length) }, async () => {
+      while (nextIndex < queries.length) {
+        const index = nextIndex++;
+        try {
+          results[index] = await animeService.searchAnime(queries[index]);
+        } catch (_error) {
+          results[index] = null;
+        }
+      }
+    });
+
+    await Promise.all(workers);
+    res.status(200).json({ success: true, data: { results } });
+  })
+);
+
 router.get(
   "/info",
   asyncHandler(async (req, res) => {
