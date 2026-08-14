@@ -47,6 +47,41 @@ router.get(
 
 router.use(requireApiKey, dailyRateLimit);
 
+router.post(
+  "/anilist",
+  asyncHandler(async (req, res) => {
+    const query = typeof req.body?.query === "string" ? req.body.query.trim() : "";
+    const variables = req.body?.variables;
+
+    if (!query) {
+      throw new ApiError(400, "Se requiere una consulta GraphQL de AniList");
+    }
+    if (query.length > 20_000) {
+      throw new ApiError(413, "La consulta de AniList es demasiado grande");
+    }
+    if (variables !== undefined && (variables === null || Array.isArray(variables) || typeof variables !== "object")) {
+      throw new ApiError(400, "variables debe ser un objeto");
+    }
+
+    const axios = require("axios");
+    const response = await axios.post(
+      "https://graphql.anilist.co",
+      { query, variables: variables || {} },
+      {
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          "User-Agent": "YumeAnime/1.0",
+        },
+        timeout: 20_000,
+        validateStatus: () => true,
+      }
+    );
+
+    res.status(response.status).json(response.data);
+  })
+);
+
 router.get(
   "/search",
   asyncHandler(async (req, res) => {
